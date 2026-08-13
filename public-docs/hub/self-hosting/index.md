@@ -18,21 +18,18 @@ Migrations run automatically at startup. Hub does not start listening when a mig
 
 ## Configuration
 
-Hub has one public URL and one persistent application secret:
+Hub needs a public URL and a database:
 
-| Variable                | Purpose                                                                      |
-| ----------------------- | ---------------------------------------------------------------------------- |
-| `PASEO_HUB_APP_URL`     | Public origin used by the dashboard, authentication, callbacks, and webhooks |
-| `PASEO_HUB_AUTH_SECRET` | Protects browser sessions and derives execution credentials                  |
-| `DATABASE_URL`          | PostgreSQL connection string                                                 |
+| Variable            | Purpose                                                                      |
+| ------------------- | ---------------------------------------------------------------------------- |
+| `PASEO_HUB_APP_URL` | Public origin used by the dashboard, authentication, callbacks, and webhooks |
+| `DATABASE_URL`      | PostgreSQL connection string                                                 |
 
-Generate `PASEO_HUB_AUTH_SECRET` once and keep it across restarts:
+You do not supply an authentication secret. The secret that protects browser sessions and derives execution credentials lives in the database Hub is already using: Hub reuses the stored one, or generates and stores one when there is none. Instances starting at the same time settle on a single stored secret.
 
-```sh
-openssl rand -hex 32
-```
+Set `PASEO_HUB_AUTH_SECRET` only when a deployment has to supply that secret itself, such as from a platform secret store. Hub then uses the override and stores nothing. Remove it and Hub resumes the stored secret, generating and storing one at that point if the deployment never had one.
 
-Changing it signs everyone out and invalidates completion credentials for executions that are still running.
+Changing the effective secret — adding, rotating, or removing the override — signs everyone out of the dashboard. Execution credentials already issued stay valid until their execution ends.
 
 Bootstrap the first owner with:
 
@@ -81,7 +78,7 @@ cd hub
 cp .env.example .env
 ```
 
-Set `PASEO_HUB_APP_URL`, `PASEO_HUB_AUTH_SECRET`, and the three bootstrap values in `.env`, then run:
+Set `PASEO_HUB_APP_URL` and the three bootstrap values in `.env`, then run:
 
 ```sh
 docker compose up -d
@@ -122,11 +119,10 @@ fly postgres create --name your-hub-db
 fly postgres attach your-hub-db -a your-hub
 ```
 
-Set the application secret and bootstrap account, along with credentials for the providers you use:
+Set the bootstrap account, along with credentials for the providers you use:
 
 ```sh
 fly secrets set -a your-hub \
-  PASEO_HUB_AUTH_SECRET="$(openssl rand -hex 32)" \
   PASEO_BOOTSTRAP_ORGANIZATION="My organization" \
   PASEO_BOOTSTRAP_OWNER_EMAIL=me@example.com \
   PASEO_BOOTSTRAP_OWNER_PASSWORD=replace-with-a-temporary-password
