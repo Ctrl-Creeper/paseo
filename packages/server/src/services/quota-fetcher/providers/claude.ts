@@ -83,11 +83,11 @@ type ClaudeLimit = z.infer<typeof ClaudeLimitSchema>;
 
 const SCOPED_WEEKLY_KIND = "weekly_scoped";
 
-// A 403 from the usage endpoint is permanent, not a stale token: Team/Enterprise seats are
-// scoped to inference and manage usage at the org level, so the endpoint forbids them. Say
-// so instead of blanking the card or pointlessly refreshing a token that will still be 403.
+// A 403 is a valid credential that simply isn't allowed to read usage through this path,
+// as opposed to a 401, which is a stale token worth refreshing. Refreshing can't widen a
+// credential's access, so surface it plainly instead of blanking the card or retrying.
 const CLAUDE_USAGE_FORBIDDEN_MESSAGE =
-  "Usage not available for this account (managed at the organization level).";
+  "Usage can't be fetched for this account with the current Claude Code credentials.";
 
 interface ClaudeCredentialRecord {
   oauth: { accessToken: string } & NonNullable<ClaudeCredentials["claudeAiOauth"]>;
@@ -348,11 +348,7 @@ export class ClaudeQuotaProvider implements ProviderUsageFetcher {
     let resp = await this.callClaudeApi(oauth.accessToken);
 
     if (resp === "FORBIDDEN") {
-      return unavailableUsage({
-        providerId: this.providerId,
-        displayName: this.displayName,
-        error: CLAUDE_USAGE_FORBIDDEN_MESSAGE,
-      });
+      return this.forbiddenUsage();
     }
 
     if (resp === "NEEDS_AUTH") {
@@ -372,9 +368,12 @@ export class ClaudeQuotaProvider implements ProviderUsageFetcher {
       });
 
       resp = await this.callClaudeApi(refreshed.access_token);
-      // A fresh token that still can't authenticate (or is now forbidden) has nothing left
-      // to try; the forbidden message only matters on the first, un-refreshed call.
-      if (typeof resp === "string") {
+      // A refreshed token that is still forbidden gets the same explicit message; a still
+      // unauthenticated one is a genuine auth failure and stays generic unavailable.
+      if (resp === "FORBIDDEN") {
+        return this.forbiddenUsage();
+      }
+      if (resp === "NEEDS_AUTH") {
         return unavailableUsage(this);
       }
     }
@@ -440,6 +439,14 @@ export class ClaudeQuotaProvider implements ProviderUsageFetcher {
       parsed.push(limit);
     }
     return parsed;
+  }
+
+  private forbiddenUsage(): ProviderUsage {
+    return unavailableUsage({
+      providerId: this.providerId,
+      displayName: this.displayName,
+      error: CLAUDE_USAGE_FORBIDDEN_MESSAGE,
+    });
   }
 
   private async readCredentials(): Promise<ClaudeCredentialRecord | null> {
