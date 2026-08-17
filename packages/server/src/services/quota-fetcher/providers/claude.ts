@@ -83,6 +83,12 @@ type ClaudeLimit = z.infer<typeof ClaudeLimitSchema>;
 
 const SCOPED_WEEKLY_KIND = "weekly_scoped";
 
+// A 403 from the usage endpoint is permanent, not a stale token: Team/Enterprise seats are
+// scoped to inference and manage usage at the org level, so the endpoint forbids them. Say
+// so instead of blanking the card or pointlessly refreshing a token that will still be 403.
+const CLAUDE_USAGE_FORBIDDEN_MESSAGE =
+  "Usage not available for this account (managed at the organization level).";
+
 interface ClaudeCredentialRecord {
   oauth: { accessToken: string } & NonNullable<ClaudeCredentials["claudeAiOauth"]>;
   filePath: string | null;
@@ -341,6 +347,14 @@ export class ClaudeQuotaProvider implements ProviderUsageFetcher {
     const plan = buildClaudePlan(oauth.subscriptionType, oauth.rateLimitTier);
     let resp = await this.callClaudeApi(oauth.accessToken);
 
+    if (resp === "FORBIDDEN") {
+      return unavailableUsage({
+        providerId: this.providerId,
+        displayName: this.displayName,
+        error: CLAUDE_USAGE_FORBIDDEN_MESSAGE,
+      });
+    }
+
     if (resp === "NEEDS_AUTH") {
       if (!filePath || !oauth.refreshToken) {
         return unavailableUsage(this);
@@ -358,7 +372,9 @@ export class ClaudeQuotaProvider implements ProviderUsageFetcher {
       });
 
       resp = await this.callClaudeApi(refreshed.access_token);
-      if (resp === "NEEDS_AUTH") {
+      // A fresh token that still can't authenticate (or is now forbidden) has nothing left
+      // to try; the forbidden message only matters on the first, un-refreshed call.
+      if (typeof resp === "string") {
         return unavailableUsage(this);
       }
     }
@@ -454,7 +470,9 @@ export class ClaudeQuotaProvider implements ProviderUsageFetcher {
     return null;
   }
 
-  private async callClaudeApi(token: string): Promise<ClaudeUsageResponse | "NEEDS_AUTH"> {
+  private async callClaudeApi(
+    token: string,
+  ): Promise<ClaudeUsageResponse | "NEEDS_AUTH" | "FORBIDDEN"> {
     const res = await fetchProviderApi(this.fetchApi, "https://api.anthropic.com/api/oauth/usage", {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -462,7 +480,8 @@ export class ClaudeQuotaProvider implements ProviderUsageFetcher {
         "anthropic-beta": CLAUDE_OAUTH_BETA,
       },
     });
-    if (res.status === 401 || res.status === 403) return "NEEDS_AUTH";
+    if (res.status === 401) return "NEEDS_AUTH";
+    if (res.status === 403) return "FORBIDDEN";
     if (!res.ok) throw new Error(`Claude usage API returned ${res.status}`);
     return ClaudeUsageResponseSchema.parse(await res.json());
   }
