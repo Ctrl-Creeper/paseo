@@ -83,10 +83,9 @@ type ClaudeLimit = z.infer<typeof ClaudeLimitSchema>;
 
 const SCOPED_WEEKLY_KIND = "weekly_scoped";
 
-// A 403 is not a stale token, so refreshing cannot clear it: the request was rejected
-// before any credential check, which an unauthenticated probe returning 403 rather than
-// 401 confirms. Observed causes are environmental (the daemon's egress being refused),
-// so the message names the refusal without guessing which one it was.
+// A 403 is not a stale token, so refreshing cannot clear it, and refreshing anyway rewrites
+// the credentials on every poll. What causes the refusal is not visible from here, so the
+// message names the refusal rather than guessing at a reason.
 const CLAUDE_USAGE_FORBIDDEN_MESSAGE =
   "Usage request was refused (HTTP 403). Check the daemon's network access to api.anthropic.com.";
 
@@ -332,7 +331,7 @@ export class ClaudeQuotaProvider implements ProviderUsageFetcher {
   constructor(options: ClaudeQuotaProviderOptions) {
     this.logger = options.logger.child({ module: "claude-quota-provider" });
     this.claudeHome =
-      options.claudeHome || process.env["CLAUDE_CONFIG_DIR"] || join(homedir(), ".claude");
+      options.claudeHome || process.env["CLAUDE_HOME"] || join(homedir(), ".claude");
     this.readKeychainCredentials = options.claudeKeychainReader ?? readClaudeKeychainCredentials;
     this.platform = options.platform ?? process.platform;
     this.fetchApi = options.fetch ?? fetch;
