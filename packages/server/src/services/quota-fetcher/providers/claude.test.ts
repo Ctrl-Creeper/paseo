@@ -28,7 +28,7 @@ describe("ClaudeQuotaProvider forbidden handling", () => {
     const usage = await provider.fetchUsage();
 
     expect(usage.status).toBe("error");
-    expect(usage.error).toMatch(/current Claude Code credentials/i);
+    expect(usage.error).toMatch(/refused \(HTTP 403\)/i);
     expect(usage.windows).toHaveLength(0);
   });
 
@@ -109,6 +109,6 @@ describe("ClaudeQuotaProvider refresh-then-forbidden", () => {
 
     expect(usageCalls).toBe(2);
     expect(usage.status).toBe("error");
-    expect(usage.error).toMatch(/current Claude Code credentials/i);
+    expect(usage.error).toMatch(/refused \(HTTP 403\)/i);
   });
 });

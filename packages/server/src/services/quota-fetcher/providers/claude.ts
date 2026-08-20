@@ -83,11 +83,12 @@ type ClaudeLimit = z.infer<typeof ClaudeLimitSchema>;
 
 const SCOPED_WEEKLY_KIND = "weekly_scoped";
 
-// A 403 is a valid credential that simply isn't allowed to read usage through this path,
-// as opposed to a 401, which is a stale token worth refreshing. Refreshing can't widen a
-// credential's access, so surface it plainly instead of blanking the card or retrying.
+// A 403 is not a stale token, so refreshing cannot clear it: the request was rejected
+// before any credential check, which an unauthenticated probe returning 403 rather than
+// 401 confirms. Observed causes are environmental (the daemon's egress being refused),
+// so the message names the refusal without guessing which one it was.
 const CLAUDE_USAGE_FORBIDDEN_MESSAGE =
-  "Usage can't be fetched for this account with the current Claude Code credentials.";
+  "Usage request was refused (HTTP 403). Check the daemon's network access to api.anthropic.com.";
 
 interface ClaudeCredentialRecord {
   oauth: { accessToken: string } & NonNullable<ClaudeCredentials["claudeAiOauth"]>;
