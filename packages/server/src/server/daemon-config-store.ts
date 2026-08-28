@@ -9,6 +9,7 @@ import {
   MutableDaemonConfigPatchSchema,
 } from "@getpaseo/protocol/messages";
 import type { AgentSkillSelection } from "@getpaseo/protocol/messages";
+import { normalizeRelayEndpoint } from "@getpaseo/protocol/daemon-endpoints";
 
 export type { MutableDaemonConfig, MutableDaemonConfigPatch } from "@getpaseo/protocol/messages";
 
@@ -430,6 +431,12 @@ export class DaemonConfigStore {
       throw new Error(
         `Relay is controlled by a daemon launch override. Remove ${env ?? path} or the corresponding CLI option before changing it here.`,
       );
+    }
+    if (parsedPatch.relay?.endpoint !== undefined) {
+      normalizeRelayEndpoint(parsedPatch.relay.endpoint);
+    }
+    if (parsedPatch.relay?.publicEndpoint !== undefined) {
+      normalizeRelayEndpoint(parsedPatch.relay.publicEndpoint);
     }
   }
 

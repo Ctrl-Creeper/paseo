@@ -41,6 +41,19 @@ describe("relay settings form model", () => {
     expect(model.buildPatch()).toBeNull();
   });
 
+  it("rejects host values that would escape into URL credentials or paths", () => {
+    const model = createRelaySettingsFormModel({ initialValues, overrideControlledPaths: [] });
+
+    model.setField("endpoint", "relay user@example.com:443");
+    model.setField("publicEndpoint", "relay.example.com/path:443");
+
+    expect(model.getState()).toMatchObject({
+      canSubmit: false,
+      errors: { endpoint: "hostPort", publicEndpoint: "hostPort" },
+    });
+    expect(model.buildPatch()).toBeNull();
+  });
+
   it("omits launch-controlled fields and exposes their environment variables", () => {
     const model = createRelaySettingsFormModel({
       initialValues,
@@ -68,5 +81,34 @@ describe("relay settings form model", () => {
     unsubscribe();
     model.setField("enabled", true);
     expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it("locks saved values while restart is pending", () => {
+    const model = createRelaySettingsFormModel({ initialValues, overrideControlledPaths: [] });
+    model.setField("endpoint", "relay.new.example:443");
+
+    model.startSaving();
+    model.markRestartRequired();
+    model.setField("endpoint", "relay.unsaved.example:443");
+
+    expect(model.getState()).toMatchObject({
+      phase: "restartRequired",
+      values: { endpoint: "relay.new.example:443" },
+    });
+    expect(model.buildPatch()).toEqual({ relay: { endpoint: "relay.new.example:443" } });
+  });
+
+  it("returns to restartRequired with an actionable error when restart fails", () => {
+    const model = createRelaySettingsFormModel({ initialValues, overrideControlledPaths: [] });
+    model.setField("endpoint", "relay.new.example:443");
+    model.startSaving();
+    model.markRestartRequired();
+    model.startRestarting();
+    model.markRestartFailed("unable to reconnect");
+
+    expect(model.getState()).toMatchObject({
+      phase: "restartRequired",
+      error: { kind: "restart", message: "unable to reconnect" },
+    });
   });
 });

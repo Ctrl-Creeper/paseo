@@ -172,7 +172,7 @@ const MutableBrowserToolsConfigSchema = z
 const MutableRelayConfigSchema = z
   .object({
     enabled: z.boolean(),
-    // COMPAT(relayEndpointConfig): added in v0.7.0, keep optional until old daemons are unsupported.
+    // COMPAT(relayEndpointConfig): added in v0.7.0, remove after 2027-08-28.
     endpoint: z.string().optional(),
     publicEndpoint: z.string().optional(),
     useTls: z.boolean().optional(),
@@ -4559,7 +4559,7 @@ export const GetDaemonConfigResponseMessageSchema = z.object({
     .object({
       requestId: z.string(),
       config: MutableDaemonConfigSchema,
-      // COMPAT(relayEndpointConfig): added in v0.7.0, keep optional for old daemons.
+      // COMPAT(relayEndpointConfig): added in v0.7.0, remove after 2027-08-28.
       overrideControlledPaths: z.array(z.string()).optional(),
     })
     .passthrough(),
@@ -4669,7 +4669,7 @@ export const SetDaemonConfigResponseMessageSchema = z.object({
     .object({
       requestId: z.string(),
       config: MutableDaemonConfigSchema,
-      // COMPAT(relayEndpointConfig): added in v0.7.0, keep optional for old daemons.
+      // COMPAT(relayEndpointConfig): added in v0.7.0, remove after 2027-08-28.
       restartRequiredPaths: z.array(z.string()).optional(),
       overrideControlledPaths: z.array(z.string()).optional(),
     })

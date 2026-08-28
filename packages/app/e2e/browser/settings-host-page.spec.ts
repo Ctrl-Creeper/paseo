@@ -33,6 +33,56 @@ test.describe("Settings host page", () => {
     await expectHostConnectionsCard(page, port);
   });
 
+  test("relay settings validate, persist, restart, and reconnect through the GUI", async ({
+    page,
+    relaySettingsDaemon,
+  }) => {
+    await seedSavedSettingsHosts(page, [
+      {
+        serverId: relaySettingsDaemon.serverId,
+        label: "relay settings host",
+        endpoint: `127.0.0.1:${relaySettingsDaemon.port}`,
+      },
+    ]);
+    await page.reload();
+    await openSettings(page);
+    await openSettingsHost(page, relaySettingsDaemon.serverId);
+
+    const relayCard = page.getByTestId("host-page-relay-card");
+    await expect(relayCard).toContainText("Daemon endpoint: 127.0.0.1:9");
+    await expect(relayCard).toContainText("Public endpoint: 127.0.0.1:9");
+    await page.getByTestId("host-page-relay-configure-button").click();
+
+    const endpointInput = page.getByTestId("relay-endpoint-input");
+    const publicEndpointInput = page.getByTestId("relay-public-endpoint-input");
+    const saveButton = page.getByTestId("relay-settings-save-button");
+    await endpointInput.fill("relay.example.com/path:443");
+    await expect(saveButton).toBeDisabled();
+
+    await endpointInput.fill("127.0.0.1:10");
+    await publicEndpointInput.fill("relay.e2e.example:7443");
+    await expect(saveButton).toHaveText("Save and restart");
+    await saveButton.click();
+
+    await expect(page.getByTestId("relay-settings-modal")).toHaveCount(0, { timeout: 30_000 });
+    await expect(relayCard).toContainText("Daemon endpoint: 127.0.0.1:10");
+    await expect(relayCard).toContainText("Public endpoint: relay.e2e.example:7443");
+  });
+
+  test("relay settings stay unavailable when the daemon lacks endpoint configuration", async ({
+    page,
+    relayConfigOutdatedDaemon,
+  }) => {
+    await seedSavedSettingsHosts(page, [relayConfigOutdatedDaemon]);
+    await page.reload();
+    await openSettings(page);
+    await openSettingsHost(page, relayConfigOutdatedDaemon.serverId);
+
+    const relayCard = page.getByTestId("host-page-relay-card");
+    await expect(relayCard).toContainText("Update this host to configure relay endpoints");
+    await expect(page.getByTestId("host-page-relay-configure-button")).toBeDisabled();
+  });
+
   test("agents section shows the inject MCP toggle", async ({ page }) => {
     const serverId = getServerId();
 

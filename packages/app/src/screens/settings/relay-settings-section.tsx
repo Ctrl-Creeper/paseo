@@ -7,19 +7,25 @@ import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-moda
 import { Button } from "@/components/ui/button";
 import { Field, FormTextInput } from "@/components/ui/form-field";
 import { Switch } from "@/components/ui/switch";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { getIsElectron } from "@/constants/platform";
 import { getDesktopDaemonStatus, restartDesktopDaemon } from "@/desktop/daemon/desktop-daemon";
 import { loadDesktopSettings } from "@/desktop/settings/desktop-settings";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
-import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
-import { settingsStyles } from "@/styles/settings";
-import { restartDaemonFromSettings } from "./daemon-restart";
 import {
-  createRelaySettingsFormModel,
-  type RelaySettingsField,
-  type RelaySettingsValues,
-} from "./relay-settings-form-model";
+  getHostRuntimeStore,
+  useHostMutations,
+  useHostRuntimeClient,
+  useHostRuntimeIsConnected,
+  useHosts,
+} from "@/runtime/host-runtime";
+import { settingsStyles } from "@/styles/settings";
+import { restartDaemonAndWaitForReconnect, restartDaemonFromSettings } from "./daemon-restart";
+import { buildRelayConnectionMigration } from "./relay-connection-migration";
+import { type RelaySettingsField, type RelaySettingsValues } from "./relay-settings-form-model";
+import { submitRelaySettings } from "./relay-settings-submit";
 import { SettingsSection } from "./settings-section";
+import { useRelaySettingsFormModel } from "./use-relay-settings-form-model";
 
 interface RelayModalSnapshot {
   values: RelaySettingsValues;
@@ -72,20 +78,17 @@ function RelaySettingsModal({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const controlSize = useIsCompactFormFactor() ? "md" : "sm";
   const client = useHostRuntimeClient(serverId);
   const { patchConfigWithResult } = useDaemonConfig(serverId);
-  const model = useMemo(
-    () =>
-      createRelaySettingsFormModel({
-        initialValues: snapshot.values,
-        overrideControlledPaths: snapshot.overrideControlledPaths,
-      }),
-    [snapshot],
-  );
+  const hosts = useHosts();
+  const { upsertRelayConnection } = useHostMutations();
+  const model = useRelaySettingsFormModel({
+    initialValues: snapshot.values,
+    overrideControlledPaths: snapshot.overrideControlledPaths,
+  });
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
-  const [isPending, setIsPending] = useState(false);
-  const [savedNeedsRestart, setSavedNeedsRestart] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const isPending = state.phase === "saving" || state.phase === "restarting";
   const header = useMemo<SheetHeader>(
     () => ({ title: t("settings.host.relay.configureTitle") }),
     [t],
@@ -93,14 +96,34 @@ function RelaySettingsModal({
 
   const restart = useCallback(async () => {
     if (!client) throw new Error(t("workspace.terminal.hostDisconnected"));
-    await restartDaemonFromSettings(serverId, `settings_relay_config_${serverId}`, {
-      getIsElectron,
-      getDesktopDaemonStatus,
-      getDesktopSettings: loadDesktopSettings,
-      restartDesktopDaemon,
-      restartServer: (reason) => client.restartServer(reason),
+    const runtime = getHostRuntimeStore();
+    await restartDaemonAndWaitForReconnect({
+      getSnapshot: () => runtime.getSnapshot(serverId),
+      subscribe: (listener) => runtime.subscribe(serverId, listener),
+      restart: () =>
+        restartDaemonFromSettings(serverId, `settings_relay_config_${serverId}`, {
+          getIsElectron,
+          getDesktopDaemonStatus,
+          getDesktopSettings: loadDesktopSettings,
+          restartDesktopDaemon,
+          restartServer: (reason) => client.restartServer(reason),
+        }),
     });
   }, [client, serverId, t]);
+
+  const migrateRelayConnection = useCallback(
+    async (relay: RelaySettingsValues) => {
+      const host = hosts.find((candidate) => candidate.serverId === serverId);
+      if (!host) return;
+      const migration = buildRelayConnectionMigration({
+        host,
+        publicEndpoint: relay.publicEndpoint,
+        publicUseTls: relay.publicUseTls,
+      });
+      if (migration) await upsertRelayConnection(migration);
+    },
+    [hosts, serverId, upsertRelayConnection],
+  );
 
   const handleClose = useCallback(() => {
     if (!isPending) onClose();
@@ -127,41 +150,20 @@ function RelaySettingsModal({
   );
 
   const handleSubmit = useCallback(async () => {
-    setIsPending(true);
-    setSubmitError(null);
-    try {
-      if (savedNeedsRestart) {
-        try {
-          await restart();
-          onClose();
-        } catch (error) {
-          setSubmitError(t("settings.host.relay.restartFailed", { error: errorMessage(error) }));
-        }
-        return;
-      }
-
-      const patch = model.buildPatch();
-      if (!patch) return;
-      const result = await patchConfigWithResult(patch);
-      if (!result) throw new Error(t("workspace.terminal.hostDisconnected"));
-      if (result.restartRequiredPaths.length === 0) {
-        onClose();
-        return;
-      }
-
-      setSavedNeedsRestart(true);
-      try {
-        await restart();
-        onClose();
-      } catch (error) {
-        setSubmitError(t("settings.host.relay.restartFailed", { error: errorMessage(error) }));
-      }
-    } catch (error) {
-      setSubmitError(t("settings.host.relay.saveFailed", { error: errorMessage(error) }));
-    } finally {
-      setIsPending(false);
+    const result = await submitRelaySettings({
+      model,
+      patchConfig: patchConfigWithResult,
+      migrateRelayConnection,
+      restart,
+      formatSaveError: (error) =>
+        t("settings.host.relay.saveFailed", { error: errorMessage(error) }),
+      formatRestartError: (error) =>
+        t("settings.host.relay.restartFailed", { error: errorMessage(error) }),
+    });
+    if (result === "close") {
+      onClose();
     }
-  }, [model, onClose, patchConfigWithResult, restart, savedNeedsRestart, t]);
+  }, [migrateRelayConnection, model, onClose, patchConfigWithResult, restart, t]);
   const handleSubmitPress = useCallback(() => {
     void handleSubmit();
   }, [handleSubmit]);
@@ -180,7 +182,7 @@ function RelaySettingsModal({
     ? t("settings.host.relay.hostPortError")
     : undefined;
   let submitLabel = t("settings.host.relay.save");
-  if (savedNeedsRestart) submitLabel = t("settings.host.relay.retryRestart");
+  if (state.phase === "restartRequired") submitLabel = t("settings.host.relay.retryRestart");
   else if (model.hasRestartRequiredChanges()) {
     submitLabel = t("settings.host.relay.saveAndRestart");
   }
@@ -198,7 +200,7 @@ function RelaySettingsModal({
           label={t("settings.host.relay.enabled")}
           value={state.values.enabled}
           onValueChange={handleEnabledChange}
-          disabled={isPending || Boolean(model.getOverrideEnv("enabled"))}
+          disabled={state.phase !== "editing" || Boolean(model.getOverrideEnv("enabled"))}
           hint={overrideHint("enabled")}
           testID="relay-enabled-switch"
         />
@@ -216,7 +218,8 @@ function RelaySettingsModal({
           <FormTextInput
             initialValue={state.values.endpoint}
             onChangeText={handleEndpointChange}
-            editable={!isPending && !endpointOverride}
+            editable={state.phase === "editing" && !endpointOverride}
+            size={controlSize}
             autoCapitalize="none"
             autoCorrect={false}
             accessibilityLabel={t("settings.host.relay.endpoint")}
@@ -228,7 +231,7 @@ function RelaySettingsModal({
           label={t("settings.host.relay.useTls")}
           value={state.values.useTls}
           onValueChange={handleUseTlsChange}
-          disabled={isPending || Boolean(model.getOverrideEnv("useTls"))}
+          disabled={state.phase !== "editing" || Boolean(model.getOverrideEnv("useTls"))}
           hint={overrideHint("useTls")}
           testID="relay-use-tls-switch"
         />
@@ -246,7 +249,8 @@ function RelaySettingsModal({
           <FormTextInput
             initialValue={state.values.publicEndpoint}
             onChangeText={handlePublicEndpointChange}
-            editable={!isPending && !publicEndpointOverride}
+            editable={state.phase === "editing" && !publicEndpointOverride}
+            size={controlSize}
             autoCapitalize="none"
             autoCorrect={false}
             accessibilityLabel={t("settings.host.relay.publicEndpoint")}
@@ -258,14 +262,14 @@ function RelaySettingsModal({
           label={t("settings.host.relay.publicUseTls")}
           value={state.values.publicUseTls}
           onValueChange={handlePublicUseTlsChange}
-          disabled={isPending || Boolean(model.getOverrideEnv("publicUseTls"))}
+          disabled={state.phase !== "editing" || Boolean(model.getOverrideEnv("publicUseTls"))}
           hint={overrideHint("publicUseTls")}
           testID="relay-public-use-tls-switch"
         />
 
-        {submitError ? (
+        {state.error ? (
           <Text style={settingsStyles.rowError} testID="relay-settings-error">
-            {submitError}
+            {state.error.message}
           </Text>
         ) : null}
 
@@ -282,7 +286,9 @@ function RelaySettingsModal({
             variant="default"
             style={styles.actionButton}
             onPress={handleSubmitPress}
-            disabled={isPending || (!savedNeedsRestart && (!state.canSubmit || !client))}
+            disabled={
+              isPending || (state.phase !== "restartRequired" && (!state.canSubmit || !client))
+            }
             loading={isPending}
             testID="relay-settings-save-button"
           >
@@ -303,7 +309,8 @@ export function RelaySettingsSection({ serverId }: { serverId: string }) {
   const supportsEndpointConfig =
     client?.getLastServerInfoMessage()?.features?.relayEndpointConfig === true;
   const relay = config?.relay;
-  const endpoint = relay?.publicEndpoint ?? relay?.endpoint ?? "relay.paseo.sh:443";
+  const daemonEndpoint = relay?.endpoint ?? "relay.paseo.sh:443";
+  const publicEndpoint = relay?.publicEndpoint ?? daemonEndpoint;
 
   const handleOpen = useCallback(() => {
     if (!relay) return;
@@ -330,9 +337,20 @@ export function RelaySettingsSection({ serverId }: { serverId: string }) {
                 ? t("settings.host.relay.enabledStatus")
                 : t("settings.host.relay.disabledStatus")}
             </Text>
-            <Text style={settingsStyles.rowHint} numberOfLines={2}>
-              {supportsEndpointConfig ? endpoint : t("settings.host.relay.updateRequired")}
-            </Text>
+            {supportsEndpointConfig ? (
+              <>
+                <Text style={settingsStyles.rowHint} numberOfLines={1}>
+                  {t("settings.host.relay.endpoint")}: {daemonEndpoint}
+                </Text>
+                <Text style={settingsStyles.rowHint} numberOfLines={1}>
+                  {t("settings.host.relay.publicEndpoint")}: {publicEndpoint}
+                </Text>
+              </>
+            ) : (
+              <Text style={settingsStyles.rowHint} numberOfLines={2}>
+                {t("settings.host.relay.updateRequired")}
+              </Text>
+            )}
           </View>
           <Button
             variant="outline"

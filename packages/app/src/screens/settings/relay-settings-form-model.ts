@@ -1,4 +1,4 @@
-import { normalizeHostPort } from "@getpaseo/protocol/daemon-endpoints";
+import { normalizeRelayEndpoint } from "@getpaseo/protocol/daemon-endpoints";
 import type { MutableDaemonConfigPatch } from "@getpaseo/protocol/messages";
 
 export interface RelaySettingsValues {
@@ -17,6 +17,8 @@ export interface RelaySettingsFormState {
   errors: Partial<Record<RelaySettingsField, RelaySettingsError>>;
   isDirty: boolean;
   canSubmit: boolean;
+  phase: "editing" | "saving" | "restartRequired" | "restarting";
+  error: { kind: "save" | "restart"; message: string } | null;
 }
 
 export interface RelaySettingsFormModel {
@@ -26,6 +28,12 @@ export interface RelaySettingsFormModel {
   buildPatch(): MutableDaemonConfigPatch | null;
   hasRestartRequiredChanges(): boolean;
   getOverrideEnv(field: RelaySettingsField): string | null;
+  startSaving(): void;
+  markSaveFailed(message: string): void;
+  markRestartRequired(savedValues?: RelaySettingsValues): void;
+  startRestarting(): void;
+  markRestartFailed(message: string): void;
+  close(): void;
 }
 
 const FIELD_PATHS: Record<RelaySettingsField, string> = {
@@ -54,7 +62,7 @@ const RESTART_REQUIRED_FIELDS = new Set<RelaySettingsField>([
 function normalizeEndpoint(value: string): string | null {
   if (value.includes("://")) return null;
   try {
-    return normalizeHostPort(value);
+    return normalizeRelayEndpoint(value);
   } catch {
     return null;
   }
@@ -68,6 +76,9 @@ export function createRelaySettingsFormModel(input: {
   const overrideControlledPaths = new Set(input.overrideControlledPaths);
   const listeners = new Set<() => void>();
   let values = { ...initialValues };
+  let phase: RelaySettingsFormState["phase"] = "editing";
+  let error: RelaySettingsFormState["error"] = null;
+  let closed = false;
   let state = buildState();
 
   function isOverridden(field: RelaySettingsField): boolean {
@@ -105,17 +116,34 @@ export function createRelaySettingsFormModel(input: {
       errors,
       isDirty,
       canSubmit: isDirty && Object.keys(errors).length === 0,
+      phase,
+      error,
     };
+  }
+
+  function publish(): void {
+    if (closed) return;
+    state = buildState();
+    for (const listener of listeners) listener();
+  }
+
+  function transition(
+    nextPhase: RelaySettingsFormState["phase"],
+    nextError: RelaySettingsFormState["error"] = null,
+  ): void {
+    phase = nextPhase;
+    error = nextError;
+    publish();
   }
 
   function setField<Field extends RelaySettingsField>(
     field: Field,
     value: RelaySettingsValues[Field],
   ): void {
-    if (values[field] === value) return;
+    if (closed || phase !== "editing" || values[field] === value) return;
     values = { ...values, [field]: value };
-    state = buildState();
-    for (const listener of listeners) listener();
+    error = null;
+    publish();
   }
 
   function buildPatch(): MutableDaemonConfigPatch | null {
@@ -140,5 +168,17 @@ export function createRelaySettingsFormModel(input: {
     hasRestartRequiredChanges: () =>
       changedFields().some((field) => RESTART_REQUIRED_FIELDS.has(field)),
     getOverrideEnv: (field) => (isOverridden(field) ? OVERRIDE_ENV[field] : null),
+    startSaving: () => transition("saving"),
+    markSaveFailed: (message) => transition("editing", { kind: "save", message }),
+    markRestartRequired: (savedValues) => {
+      if (savedValues) values = { ...savedValues };
+      transition("restartRequired");
+    },
+    startRestarting: () => transition("restarting"),
+    markRestartFailed: (message) => transition("restartRequired", { kind: "restart", message }),
+    close() {
+      closed = true;
+      listeners.clear();
+    },
   };
 }

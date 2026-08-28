@@ -197,6 +197,32 @@ describe("DaemonConfigStore", () => {
     expect(store.getOverrideControlledPaths()).toEqual(["daemon.relay.endpoint"]);
   });
 
+  test("rejects malformed relay endpoints before persisting them", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
+    tempDirs.push(paseoHome);
+    const store = new DaemonConfigStore(paseoHome, {
+      relay: {
+        enabled: true,
+        endpoint: "relay.paseo.sh:443",
+        publicEndpoint: "relay.paseo.sh:443",
+        useTls: true,
+        publicUseTls: true,
+      },
+      mcp: { injectIntoAgents: false },
+      browserTools: { enabled: false },
+      providers: {},
+      metadataGeneration: { providers: [] },
+      autoArchiveAfterMerge: false,
+      enableTerminalAgentHooks: false,
+      appendSystemPrompt: "",
+    });
+
+    expect(() =>
+      store.patchWithResult({ relay: { endpoint: "relay.example.com/path:443" } }),
+    ).toThrow("Invalid relay endpoint host");
+    expect(store.get().relay?.endpoint).toBe("relay.paseo.sh:443");
+  });
+
   test("patch round-trips agent profiles through the strictly-parsed persisted config", () => {
     const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-"));
     tempDirs.push(paseoHome);

@@ -7,6 +7,7 @@ import type {
 import { agentCommandsQueryRoot } from "@/hooks/agent-commands-query";
 import { orderCheckoutDiffFiles } from "@/git/diff-order";
 import { daemonConfigQueryKey } from "@/data/daemon-config";
+import type { DaemonConfigQueryData } from "@/data/daemon-config";
 import { daemonPairingOfferQueryKey } from "@/data/daemon-pairing";
 import { providerSnapshotCache, type ProviderSnapshotCache } from "@/data/provider-snapshot-cache";
 import {
@@ -422,9 +423,12 @@ function applyDaemonConfigStatus(input: {
   if (!isDaemonConfigChangedPayload(payload)) {
     return;
   }
-  input.queryClient.setQueryData<MutableDaemonConfig>(
+  input.queryClient.setQueryData<DaemonConfigQueryData>(
     daemonConfigQueryKey(input.serverId),
-    payload.config,
+    (current) => ({
+      config: payload.config,
+      overrideControlledPaths: current?.overrideControlledPaths ?? [],
+    }),
   );
   void input.queryClient.invalidateQueries({
     queryKey: daemonPairingOfferQueryKey(input.serverId),

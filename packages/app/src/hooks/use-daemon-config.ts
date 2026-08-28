@@ -1,9 +1,9 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import type { MutableDaemonConfig, MutableDaemonConfigPatch } from "@getpaseo/protocol/messages";
 import { useReplicaQuery } from "@/data/query";
-import { daemonConfigQueryKey } from "@/data/daemon-config";
+import { daemonConfigQueryKey, type DaemonConfigQueryData } from "@/data/daemon-config";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 
 interface UseDaemonConfigResult {
@@ -27,9 +27,7 @@ export function useDaemonConfig(serverId: string | null): UseDaemonConfigResult 
   const client = useHostRuntimeClient(serverId ?? "");
   const isConnected = useHostRuntimeIsConnected(serverId ?? "");
   const queryKey = useMemo(() => daemonConfigQueryKey(serverId), [serverId]);
-  const [overrideControlledPaths, setOverrideControlledPaths] = useState<readonly string[]>([]);
-
-  const configQuery = useReplicaQuery({
+  const configQuery = useReplicaQuery<DaemonConfigQueryData>({
     queryKey,
     enabled: Boolean(serverId && client && isConnected),
     pushEvent: "status:daemon_config_changed",
@@ -38,8 +36,10 @@ export function useDaemonConfig(serverId: string | null): UseDaemonConfigResult 
         throw new Error(t("workspace.terminal.hostDisconnected"));
       }
       const result = await client.getDaemonConfig();
-      setOverrideControlledPaths(result.overrideControlledPaths ?? []);
-      return result.config;
+      return {
+        config: result.config,
+        overrideControlledPaths: result.overrideControlledPaths ?? [],
+      };
     },
   });
 
@@ -49,9 +49,12 @@ export function useDaemonConfig(serverId: string | null): UseDaemonConfigResult 
         return undefined;
       }
       const result = await client.patchDaemonConfig(patch);
-      queryClient.setQueryData(queryKey, result.config);
+      const queryData: DaemonConfigQueryData = {
+        config: result.config,
+        overrideControlledPaths: result.overrideControlledPaths ?? [],
+      };
+      queryClient.setQueryData(queryKey, queryData);
       const nextOverrideControlledPaths = result.overrideControlledPaths ?? [];
-      setOverrideControlledPaths(nextOverrideControlledPaths);
       return {
         config: result.config,
         restartRequiredPaths: result.restartRequiredPaths ?? [],
@@ -70,8 +73,8 @@ export function useDaemonConfig(serverId: string | null): UseDaemonConfigResult 
   );
 
   return {
-    config: configQuery.data ?? null,
-    overrideControlledPaths,
+    config: configQuery.data?.config ?? null,
+    overrideControlledPaths: configQuery.data?.overrideControlledPaths ?? [],
     isLoading: configQuery.isLoading,
     patchConfig,
     patchConfigWithResult,
