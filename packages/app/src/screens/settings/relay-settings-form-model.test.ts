@@ -1,0 +1,72 @@
+import { describe, expect, it, vi } from "vitest";
+import { createRelaySettingsFormModel } from "./relay-settings-form-model";
+
+const initialValues = {
+  enabled: true,
+  endpoint: "relay.paseo.sh:443",
+  publicEndpoint: "relay.paseo.sh:443",
+  useTls: true,
+  publicUseTls: true,
+};
+
+describe("relay settings form model", () => {
+  it("normalizes valid host:port values and builds a relay patch", () => {
+    const model = createRelaySettingsFormModel({ initialValues, overrideControlledPaths: [] });
+
+    model.setField("endpoint", " relay.internal.example:7443 ");
+    model.setField("publicEndpoint", "[2001:db8::1]:443");
+    model.setField("useTls", false);
+
+    expect(model.getState()).toMatchObject({ isDirty: true, canSubmit: true });
+    expect(model.buildPatch()).toEqual({
+      relay: {
+        endpoint: "relay.internal.example:7443",
+        publicEndpoint: "[2001:db8::1]:443",
+        useTls: false,
+      },
+    });
+    expect(model.hasRestartRequiredChanges()).toBe(true);
+  });
+
+  it("rejects schemes, missing ports, and out-of-range ports", () => {
+    const model = createRelaySettingsFormModel({ initialValues, overrideControlledPaths: [] });
+
+    model.setField("endpoint", "wss://relay.example.com:443");
+    model.setField("publicEndpoint", "relay.example.com:70000");
+
+    expect(model.getState()).toMatchObject({
+      canSubmit: false,
+      errors: { endpoint: "hostPort", publicEndpoint: "hostPort" },
+    });
+    expect(model.buildPatch()).toBeNull();
+  });
+
+  it("omits launch-controlled fields and exposes their environment variables", () => {
+    const model = createRelaySettingsFormModel({
+      initialValues,
+      overrideControlledPaths: ["daemon.relay.endpoint", "daemon.relay.publicUseTls"],
+    });
+
+    model.setField("endpoint", "relay.ignored.example:443");
+    model.setField("publicUseTls", false);
+    model.setField("enabled", false);
+
+    expect(model.getOverrideEnv("endpoint")).toBe("PASEO_RELAY_ENDPOINT");
+    expect(model.getOverrideEnv("publicUseTls")).toBe("PASEO_RELAY_PUBLIC_USE_TLS");
+    expect(model.buildPatch()).toEqual({ relay: { enabled: false } });
+    expect(model.hasRestartRequiredChanges()).toBe(false);
+  });
+
+  it("notifies subscribers when a field changes", () => {
+    const model = createRelaySettingsFormModel({ initialValues, overrideControlledPaths: [] });
+    const listener = vi.fn();
+    const unsubscribe = model.subscribe(listener);
+
+    model.setField("enabled", false);
+    expect(listener).toHaveBeenCalledOnce();
+
+    unsubscribe();
+    model.setField("enabled", true);
+    expect(listener).toHaveBeenCalledOnce();
+  });
+});

@@ -4649,9 +4649,11 @@ export class DaemonClient {
     return normalizeProvidersSnapshotPayload(payload);
   }
 
-  async getDaemonConfig(
-    requestId?: string,
-  ): Promise<{ requestId: string; config: MutableDaemonConfig }> {
+  async getDaemonConfig(requestId?: string): Promise<{
+    requestId: string;
+    config: MutableDaemonConfig;
+    overrideControlledPaths?: string[];
+  }> {
     return this.sendCorrelatedSessionRequest({
       requestId,
       message: {
@@ -4732,7 +4734,12 @@ export class DaemonClient {
   async patchDaemonConfig(
     config: MutableDaemonConfigPatch,
     requestId?: string,
-  ): Promise<{ requestId: string; config: MutableDaemonConfig }> {
+  ): Promise<{
+    requestId: string;
+    config: MutableDaemonConfig;
+    restartRequiredPaths?: string[];
+    overrideControlledPaths?: string[];
+  }> {
     return this.sendCorrelatedSessionRequest({
       requestId,
       message: {

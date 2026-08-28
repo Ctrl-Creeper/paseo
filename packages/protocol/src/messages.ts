@@ -172,6 +172,11 @@ const MutableBrowserToolsConfigSchema = z
 const MutableRelayConfigSchema = z
   .object({
     enabled: z.boolean(),
+    // COMPAT(relayEndpointConfig): added in v0.7.0, keep optional until old daemons are unsupported.
+    endpoint: z.string().optional(),
+    publicEndpoint: z.string().optional(),
+    useTls: z.boolean().optional(),
+    publicUseTls: z.boolean().optional(),
   })
   .passthrough();
 
@@ -3364,6 +3369,8 @@ export const ServerInfoStatusPayloadSchema = z
         daemonConfigReload: z.boolean().optional(),
         // COMPAT(relayConfig): added in v0.2.6, remove gate after 2027-01-31.
         relayConfig: z.boolean().optional(),
+        // COMPAT(relayEndpointConfig): added in v0.7.0, remove gate after 2027-08-28.
+        relayEndpointConfig: z.boolean().optional(),
         // COMPAT(pushTokenRevocation): added in v0.3.2, remove gate after 2027-02-10.
         pushTokenRevocation: z.boolean().optional(),
         // COMPAT(plugins): added in v0.3.0, remove gate after 2027-08-07.
@@ -4552,6 +4559,8 @@ export const GetDaemonConfigResponseMessageSchema = z.object({
     .object({
       requestId: z.string(),
       config: MutableDaemonConfigSchema,
+      // COMPAT(relayEndpointConfig): added in v0.7.0, keep optional for old daemons.
+      overrideControlledPaths: z.array(z.string()).optional(),
     })
     .passthrough(),
 });
@@ -4660,6 +4669,9 @@ export const SetDaemonConfigResponseMessageSchema = z.object({
     .object({
       requestId: z.string(),
       config: MutableDaemonConfigSchema,
+      // COMPAT(relayEndpointConfig): added in v0.7.0, keep optional for old daemons.
+      restartRequiredPaths: z.array(z.string()).optional(),
+      overrideControlledPaths: z.array(z.string()).optional(),
     })
     .passthrough(),
 });

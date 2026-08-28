@@ -1215,6 +1215,7 @@ test("config actions delegate to existing daemon config RPCs", async () => {
           providers: {},
           autoArchiveAfterMerge: false,
         },
+        overrideControlledPaths: ["daemon.relay.endpoint"],
       },
     }),
   );
@@ -1229,6 +1230,7 @@ test("config actions delegate to existing daemon config RPCs", async () => {
       enableTerminalAgentHooks: false,
       appendSystemPrompt: "",
     },
+    overrideControlledPaths: ["daemon.relay.endpoint"],
   });
 
   const patchPromise = client.config.patch(
@@ -1266,6 +1268,8 @@ test("config actions delegate to existing daemon config RPCs", async () => {
           },
           autoArchiveAfterMerge: false,
         },
+        restartRequiredPaths: ["daemon.relay.publicEndpoint"],
+        overrideControlledPaths: [],
       },
     }),
   );
@@ -1284,6 +1288,8 @@ test("config actions delegate to existing daemon config RPCs", async () => {
       enableTerminalAgentHooks: false,
       appendSystemPrompt: "",
     },
+    restartRequiredPaths: ["daemon.relay.publicEndpoint"],
+    overrideControlledPaths: [],
   });
 
   await client.close();

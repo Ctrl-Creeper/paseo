@@ -2339,7 +2339,11 @@ export class Session {
       case "get_daemon_config_request":
         this.emit({
           type: "get_daemon_config_response",
-          payload: { requestId: msg.requestId, config: this.daemonConfigStore.get() },
+          payload: {
+            requestId: msg.requestId,
+            config: this.daemonConfigStore.get(),
+            overrideControlledPaths: this.daemonConfigStore.getOverrideControlledPaths(),
+          },
         });
         return undefined;
       case "daemon.get_status.request":
@@ -2358,11 +2362,14 @@ export class Session {
       case "daemon.update.request":
         return this.daemonSession.handleUpdateRequest(msg);
       case "set_daemon_config_request":
+        const patchResult = this.daemonConfigStore.patchWithResult(msg.config);
         this.emit({
           type: "set_daemon_config_response",
           payload: {
             requestId: msg.requestId,
-            config: this.daemonConfigStore.patch(msg.config),
+            config: patchResult.config,
+            restartRequiredPaths: patchResult.restartRequiredPaths,
+            overrideControlledPaths: patchResult.overrideControlledPaths,
           },
         });
         return undefined;
