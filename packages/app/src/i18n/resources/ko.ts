@@ -2274,7 +2274,9 @@ export const ko: TranslationResources = {
         save: "저장",
         saveAndRestart: "저장 후 다시 시작",
         retryRestart: "다시 시작 재시도",
+        disableRequiresDirect: "Relay를 비활성화하기 전에 이 호스트에 직접 연결하세요.",
         saveFailed: "릴레이 설정을 저장할 수 없습니다: {{error}}",
+        migrationFailed: "설정은 저장되었지만 새 Relay 연결을 추가할 수 없습니다: {{error}}",
         restartFailed: "설정은 저장되었지만 데몬을 다시 시작할 수 없습니다: {{error}}",
       },
       connections: {

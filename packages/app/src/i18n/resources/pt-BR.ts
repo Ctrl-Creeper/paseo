@@ -2299,7 +2299,10 @@ export const ptBR: TranslationResources = {
         save: "Salvar",
         saveAndRestart: "Salvar e reiniciar",
         retryRestart: "Tentar reiniciar novamente",
+        disableRequiresDirect: "Conecte-se diretamente a este host antes de desativar o relay.",
         saveFailed: "Não foi possível salvar as configurações do relay: {{error}}",
+        migrationFailed:
+          "As configurações foram salvas, mas não foi possível adicionar a nova conexão de relay: {{error}}",
         restartFailed: "As configurações foram salvas, mas o daemon não pôde reiniciar: {{error}}",
       },
       connections: {

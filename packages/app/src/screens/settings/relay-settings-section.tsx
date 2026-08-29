@@ -17,6 +17,7 @@ import {
   useHostMutations,
   useHostRuntimeClient,
   useHostRuntimeIsConnected,
+  useHostRuntimeSnapshot,
   useHosts,
 } from "@/runtime/host-runtime";
 import { settingsStyles } from "@/styles/settings";
@@ -30,6 +31,22 @@ import { useRelaySettingsFormModel } from "./use-relay-settings-form-model";
 interface RelayModalSnapshot {
   values: RelaySettingsValues;
   overrideControlledPaths: readonly string[];
+}
+
+const RELAY_PENDING_PHASES = new Set(["saving", "migrating", "restarting"]);
+
+function relayEnabledControl(input: {
+  enabled: boolean;
+  phase: string;
+  activeConnectionType: string | undefined;
+  overrideHint: string | undefined;
+  disableHint: string;
+}) {
+  const disableBlocked = input.enabled && input.activeConnectionType === "relay";
+  return {
+    disabled: input.phase !== "editing" || Boolean(input.overrideHint) || disableBlocked,
+    hint: input.overrideHint ?? (disableBlocked ? input.disableHint : undefined),
+  };
 }
 
 function errorMessage(error: unknown): string {
@@ -80,6 +97,7 @@ function RelaySettingsModal({
   const { t } = useTranslation();
   const controlSize = useIsCompactFormFactor() ? "md" : "sm";
   const client = useHostRuntimeClient(serverId);
+  const runtimeSnapshot = useHostRuntimeSnapshot(serverId);
   const { patchConfigWithResult } = useDaemonConfig(serverId);
   const hosts = useHosts();
   const { upsertRelayConnection } = useHostMutations();
@@ -88,7 +106,7 @@ function RelaySettingsModal({
     overrideControlledPaths: snapshot.overrideControlledPaths,
   });
   const state = useSyncExternalStore(model.subscribe, model.getState, model.getState);
-  const isPending = state.phase === "saving" || state.phase === "restarting";
+  const isPending = RELAY_PENDING_PHASES.has(state.phase);
   const header = useMemo<SheetHeader>(
     () => ({ title: t("settings.host.relay.configureTitle") }),
     [t],
@@ -155,15 +173,20 @@ function RelaySettingsModal({
       patchConfig: patchConfigWithResult,
       migrateRelayConnection,
       restart,
+      canDisableRelay: () =>
+        getHostRuntimeStore().getSnapshot(serverId)?.activeConnection?.type !== "relay",
+      formatDisableRelayError: () => t("settings.host.relay.disableRequiresDirect"),
       formatSaveError: (error) =>
         t("settings.host.relay.saveFailed", { error: errorMessage(error) }),
+      formatMigrationError: (error) =>
+        t("settings.host.relay.migrationFailed", { error: errorMessage(error) }),
       formatRestartError: (error) =>
         t("settings.host.relay.restartFailed", { error: errorMessage(error) }),
     });
     if (result === "close") {
       onClose();
     }
-  }, [migrateRelayConnection, model, onClose, patchConfigWithResult, restart, t]);
+  }, [migrateRelayConnection, model, onClose, patchConfigWithResult, restart, serverId, t]);
   const handleSubmitPress = useCallback(() => {
     void handleSubmit();
   }, [handleSubmit]);
@@ -177,6 +200,13 @@ function RelaySettingsModal({
     },
     [model, t],
   );
+  const enabledControl = relayEnabledControl({
+    enabled: state.values.enabled,
+    phase: state.phase,
+    activeConnectionType: runtimeSnapshot?.activeConnection?.type,
+    overrideHint: overrideHint("enabled"),
+    disableHint: t("settings.host.relay.disableRequiresDirect"),
+  });
   const endpointError = state.errors.endpoint ? t("settings.host.relay.hostPortError") : undefined;
   const publicEndpointError = state.errors.publicEndpoint
     ? t("settings.host.relay.hostPortError")
@@ -200,8 +230,8 @@ function RelaySettingsModal({
           label={t("settings.host.relay.enabled")}
           value={state.values.enabled}
           onValueChange={handleEnabledChange}
-          disabled={state.phase !== "editing" || Boolean(model.getOverrideEnv("enabled"))}
-          hint={overrideHint("enabled")}
+          disabled={enabledControl.disabled}
+          hint={enabledControl.hint}
           testID="relay-enabled-switch"
         />
 

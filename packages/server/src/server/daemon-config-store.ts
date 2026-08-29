@@ -10,6 +10,11 @@ import {
 } from "@getpaseo/protocol/messages";
 import type { AgentSkillSelection } from "@getpaseo/protocol/messages";
 import { normalizeRelayEndpoint } from "@getpaseo/protocol/daemon-endpoints";
+import {
+  RELAY_CONFIG_FIELDS,
+  RELAY_CONFIG_FIELD_KEYS,
+  type RelayConfigField,
+} from "@getpaseo/protocol/relay-config";
 
 export type { MutableDaemonConfig, MutableDaemonConfigPatch } from "@getpaseo/protocol/messages";
 
@@ -205,7 +210,7 @@ const RELOADABLE_PATHS = [
 ] as const;
 
 const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
-  ["daemon.relay.enabled", "relay.enabled"],
+  [RELAY_CONFIG_FIELDS.enabled.persistedPath, RELAY_CONFIG_FIELDS.enabled.mutablePath],
   ["daemon.mcp.enabled", "mcp.enabled"],
   ["daemon.mcp.injectIntoAgents", "mcp.injectIntoAgents"],
   ["daemon.browserTools.enabled", "browserTools.enabled"],
@@ -227,20 +232,18 @@ const PERSISTED_TO_MUTABLE_PATH = new Map<string, string>([
   ["pluginsEnabled", "pluginsEnabled"],
 ]);
 
-const RESTART_REQUIRED_MUTABLE_PATHS = new Map<string, string>([
-  ["daemon.relay.endpoint", "relay.endpoint"],
-  ["daemon.relay.publicEndpoint", "relay.publicEndpoint"],
-  ["daemon.relay.useTls", "relay.useTls"],
-  ["daemon.relay.publicUseTls", "relay.publicUseTls"],
-]);
+const RESTART_REQUIRED_MUTABLE_PATHS = new Map<string, string>(
+  RELAY_CONFIG_FIELD_KEYS.filter((field) => RELAY_CONFIG_FIELDS[field].restartRequired).map(
+    (field) => [RELAY_CONFIG_FIELDS[field].persistedPath, RELAY_CONFIG_FIELDS[field].mutablePath],
+  ),
+);
 
-const RELAY_OVERRIDE_ENV_BY_PATH = new Map<string, string>([
-  ["daemon.relay.enabled", "PASEO_RELAY_ENABLED"],
-  ["daemon.relay.endpoint", "PASEO_RELAY_ENDPOINT"],
-  ["daemon.relay.publicEndpoint", "PASEO_RELAY_PUBLIC_ENDPOINT"],
-  ["daemon.relay.useTls", "PASEO_RELAY_USE_TLS"],
-  ["daemon.relay.publicUseTls", "PASEO_RELAY_PUBLIC_USE_TLS"],
-]);
+const RELAY_OVERRIDE_ENV_BY_PATH = new Map<string, string>(
+  RELAY_CONFIG_FIELD_KEYS.map((field) => [
+    RELAY_CONFIG_FIELDS[field].persistedPath,
+    RELAY_CONFIG_FIELDS[field].env,
+  ]),
+);
 
 function pathBelongsTo(path: string, owner: string): boolean {
   return path === owner || path.startsWith(`${owner}.`);
@@ -425,7 +428,7 @@ export class DaemonConfigStore {
   private assertPatchIsMutable(parsedPatch: SupportedMutableConfigPatch): void {
     for (const [field, value] of Object.entries(parsedPatch.relay ?? {})) {
       if (value === undefined) continue;
-      const path = `daemon.relay.${field}`;
+      const path = RELAY_CONFIG_FIELDS[field as RelayConfigField].persistedPath;
       if (!this.overrideControlledPaths.includes(path)) continue;
       const env = RELAY_OVERRIDE_ENV_BY_PATH.get(path);
       throw new Error(

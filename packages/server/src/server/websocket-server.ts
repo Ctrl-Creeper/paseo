@@ -1417,6 +1417,8 @@ export class VoiceAssistantWebSocketServer {
       onMessageToSource: options.onMessageToSource,
       onBinaryMessage: options.onBinaryMessage,
       onBinaryMessageToSource: options.onBinaryMessageToSource,
+      getSourceTransport: (source) =>
+        this.socketIdentities.get(source as WebSocketLike)?.transport ?? null,
       getTransportBufferedAmount: options.getTransportBufferedAmount,
       onLifecycleIntent: options.onLifecycleIntent,
       logger: options.connectionLogger.child({ module: "session" }),

@@ -83,6 +83,19 @@ describe("relay settings form model", () => {
     expect(listener).toHaveBeenCalledOnce();
   });
 
+  it("stops publishing and accepting edits after close", () => {
+    const model = createRelaySettingsFormModel({ initialValues, overrideControlledPaths: [] });
+    const listener = vi.fn();
+    model.subscribe(listener);
+    model.setField("endpoint", "relay.edited.example:443");
+
+    model.close();
+    model.setField("endpoint", "relay.after-close.example:443");
+
+    expect(listener).toHaveBeenCalledOnce();
+    expect(model.getState().values.endpoint).toBe("relay.edited.example:443");
+  });
+
   it("locks saved values while restart is pending", () => {
     const model = createRelaySettingsFormModel({ initialValues, overrideControlledPaths: [] });
     model.setField("endpoint", "relay.new.example:443");
@@ -103,12 +116,27 @@ describe("relay settings form model", () => {
     model.setField("endpoint", "relay.new.example:443");
     model.startSaving();
     model.markRestartRequired();
+    model.startMigrating();
     model.startRestarting();
     model.markRestartFailed("unable to reconnect");
 
     expect(model.getState()).toMatchObject({
       phase: "restartRequired",
       error: { kind: "restart", message: "unable to reconnect" },
+    });
+  });
+
+  it("returns to restartRequired with a migration-specific error", () => {
+    const model = createRelaySettingsFormModel({ initialValues, overrideControlledPaths: [] });
+    model.setField("endpoint", "relay.new.example:443");
+    model.startSaving();
+    model.markRestartRequired();
+    model.startMigrating();
+    model.markMigrationFailed("unable to store connection");
+
+    expect(model.getState()).toMatchObject({
+      phase: "restartRequired",
+      error: { kind: "migration", message: "unable to store connection" },
     });
   });
 });

@@ -2316,7 +2316,10 @@ export const es: TranslationResources = {
         save: "Guardar",
         saveAndRestart: "Guardar y reiniciar",
         retryRestart: "Reintentar reinicio",
+        disableRequiresDirect: "Conéctate directamente a este host antes de desactivar el relé.",
         saveFailed: "No se pudo guardar la configuración del relé: {{error}}",
+        migrationFailed:
+          "La configuración se guardó, pero no se pudo añadir la nueva conexión de relé: {{error}}",
         restartFailed: "La configuración se guardó, pero el daemon no pudo reiniciarse: {{error}}",
       },
       connections: {

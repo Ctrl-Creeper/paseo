@@ -2302,7 +2302,11 @@ export const ru: TranslationResources = {
         save: "Сохранить",
         saveAndRestart: "Сохранить и перезапустить",
         retryRestart: "Повторить перезапуск",
+        disableRequiresDirect:
+          "Подключитесь к этому хосту напрямую перед отключением ретранслятора.",
         saveFailed: "Не удалось сохранить настройки ретранслятора: {{error}}",
+        migrationFailed:
+          "Настройки сохранены, но не удалось добавить новое подключение к ретранслятору: {{error}}",
         restartFailed: "Настройки сохранены, но демон не удалось перезапустить: {{error}}",
       },
       connections: {

@@ -2284,7 +2284,10 @@ export const ja: TranslationResources = {
         save: "保存",
         saveAndRestart: "保存して再起動",
         retryRestart: "再起動を再試行",
+        disableRequiresDirect: "Relay を無効にする前に、このホストへ直接接続してください。",
         saveFailed: "リレー設定を保存できませんでした: {{error}}",
+        migrationFailed:
+          "設定は保存されましたが、新しいリレー接続を追加できませんでした: {{error}}",
         restartFailed: "設定は保存されましたが、デーモンを再起動できませんでした: {{error}}",
       },
       connections: {

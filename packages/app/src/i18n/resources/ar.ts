@@ -2264,7 +2264,9 @@ export const ar: TranslationResources = {
         save: "حفظ",
         saveAndRestart: "حفظ وإعادة تشغيل",
         retryRestart: "إعادة محاولة التشغيل",
+        disableRequiresDirect: "اتصل بهذا المضيف مباشرة قبل تعطيل المرحل.",
         saveFailed: "تعذر حفظ إعدادات المرحل: {{error}}",
+        migrationFailed: "حُفظت الإعدادات، لكن تعذرت إضافة اتصال المرحل الجديد: {{error}}",
         restartFailed: "حُفظت الإعدادات، لكن تعذرت إعادة تشغيل البرنامج الخفي: {{error}}",
       },
       connections: {

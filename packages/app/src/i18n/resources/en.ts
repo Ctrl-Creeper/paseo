@@ -2362,7 +2362,10 @@ export const en = {
         save: "Save",
         saveAndRestart: "Save and restart",
         retryRestart: "Retry restart",
+        disableRequiresDirect: "Connect to this host directly before disabling relay.",
         saveFailed: "Unable to save relay settings: {{error}}",
+        migrationFailed:
+          "Settings were saved, but the new relay connection could not be added: {{error}}",
         restartFailed: "Settings were saved, but the daemon could not restart: {{error}}",
       },
       connections: {

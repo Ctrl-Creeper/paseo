@@ -2238,7 +2238,9 @@ export const zhCN: TranslationResources = {
         save: "保存",
         saveAndRestart: "保存并重启",
         retryRestart: "重试重启",
+        disableRequiresDirect: "请先通过直连连接到此主机，再停用 Relay。",
         saveFailed: "无法保存 Relay 设置：{{error}}",
+        migrationFailed: "设置已保存，但无法添加新的 Relay 连接：{{error}}",
         restartFailed: "设置已保存，但 Daemon 无法重启：{{error}}",
       },
       connections: {

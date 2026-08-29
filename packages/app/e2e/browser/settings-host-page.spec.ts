@@ -1,3 +1,5 @@
+import { mkdir, rename } from "node:fs/promises";
+import path from "node:path";
 import { expect, test } from "../support/fixtures";
 import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { getE2EDaemonPort } from "../support/helpers/daemon-port";
@@ -81,6 +83,35 @@ test.describe("Settings host page", () => {
     const relayCard = page.getByTestId("host-page-relay-card");
     await expect(relayCard).toContainText("Update this host to configure relay endpoints");
     await expect(page.getByTestId("host-page-relay-configure-button")).toBeDisabled();
+  });
+
+  test("relay settings keep a save failure visible and retryable", async ({
+    page,
+    relaySettingsDaemon,
+  }) => {
+    await seedSavedSettingsHosts(page, [
+      {
+        serverId: relaySettingsDaemon.serverId,
+        label: "relay settings failure host",
+        endpoint: `127.0.0.1:${relaySettingsDaemon.port}`,
+      },
+    ]);
+    await page.reload();
+    await openSettings(page);
+    await openSettingsHost(page, relaySettingsDaemon.serverId);
+    await page.getByTestId("host-page-relay-configure-button").click();
+    await page.getByTestId("relay-endpoint-input").fill("127.0.0.1:11");
+
+    const configPath = path.join(relaySettingsDaemon.paseoHome, "config.json");
+    await rename(configPath, `${configPath}.blocked`);
+    await mkdir(configPath);
+    await page.getByTestId("relay-settings-save-button").click();
+
+    const error = page.getByTestId("relay-settings-error");
+    await expect(error).toBeVisible();
+    await expect(error).toContainText("Unable to save relay settings:");
+    await expect(page.getByTestId("relay-settings-save-button")).toBeEnabled();
+    await expect(page.getByTestId("relay-settings-modal")).toBeVisible();
   });
 
   test("agents section shows the inject MCP toggle", async ({ page }) => {

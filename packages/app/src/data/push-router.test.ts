@@ -143,6 +143,21 @@ function providerUpdate(generatedAt: string): ProvidersSnapshotUpdateMessage {
 }
 
 describe("server data push router", () => {
+  it("does not invent override metadata when a daemon config push arrives before the initial fetch", () => {
+    const queryClient = new QueryClient();
+    const fake = createFakeClient();
+    const serverId = "server-1";
+    const unmount = mountServerDataPushRouter({ client: fake.client, queryClient, serverId });
+
+    fake.emit({
+      type: "status",
+      payload: { status: "daemon_config_changed", config: daemonConfig },
+    });
+
+    expect(queryClient.getQueryData(daemonConfigQueryKey(serverId))).toBeUndefined();
+    unmount();
+  });
+
   it("routes provider snapshot and daemon config payloads until detached", () => {
     const queryClient = new QueryClient();
     const fake = createFakeClient();

@@ -2322,7 +2322,11 @@ export const fr: TranslationResources = {
         save: "Enregistrer",
         saveAndRestart: "Enregistrer et redémarrer",
         retryRestart: "Réessayer le redémarrage",
+        disableRequiresDirect:
+          "Connectez-vous directement à cet hôte avant de désactiver le relais.",
         saveFailed: "Impossible d’enregistrer les réglages du relais : {{error}}",
+        migrationFailed:
+          "Les réglages ont été enregistrés, mais la nouvelle connexion au relais n’a pas pu être ajoutée : {{error}}",
         restartFailed:
           "Les réglages ont été enregistrés, mais le daemon n’a pas pu redémarrer : {{error}}",
       },

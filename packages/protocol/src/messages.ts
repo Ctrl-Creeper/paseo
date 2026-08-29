@@ -4675,6 +4675,7 @@ export const SetDaemonConfigResponseMessageSchema = z.object({
     })
     .passthrough(),
 });
+export type SetDaemonConfigResponseMessage = z.infer<typeof SetDaemonConfigResponseMessageSchema>;
 
 export const ReadProjectConfigResponseMessageSchema = z.object({
   type: z.literal("read_project_config_response"),

@@ -1,7 +1,11 @@
 import { useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import type { MutableDaemonConfig, MutableDaemonConfigPatch } from "@getpaseo/protocol/messages";
+import type {
+  MutableDaemonConfig,
+  MutableDaemonConfigPatch,
+  SetDaemonConfigResponseMessage,
+} from "@getpaseo/protocol/messages";
 import { useReplicaQuery } from "@/data/query";
 import { daemonConfigQueryKey, type DaemonConfigQueryData } from "@/data/daemon-config";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
@@ -11,12 +15,13 @@ interface UseDaemonConfigResult {
   overrideControlledPaths: readonly string[];
   isLoading: boolean;
   patchConfig: (patch: MutableDaemonConfigPatch) => Promise<MutableDaemonConfig | undefined>;
-  patchConfigWithResult: (patch: MutableDaemonConfigPatch) => Promise<
-    | {
-        config: MutableDaemonConfig;
-        restartRequiredPaths: readonly string[];
-        overrideControlledPaths: readonly string[];
-      }
+  patchConfigWithResult: (
+    patch: MutableDaemonConfigPatch,
+  ) => Promise<
+    | Pick<
+        SetDaemonConfigResponseMessage["payload"],
+        "config" | "restartRequiredPaths" | "overrideControlledPaths"
+      >
     | undefined
   >;
 }

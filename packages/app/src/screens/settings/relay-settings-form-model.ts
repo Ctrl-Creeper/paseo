@@ -1,5 +1,10 @@
 import { normalizeRelayEndpoint } from "@getpaseo/protocol/daemon-endpoints";
 import type { MutableDaemonConfigPatch } from "@getpaseo/protocol/messages";
+import {
+  RELAY_CONFIG_FIELDS,
+  RELAY_CONFIG_FIELD_KEYS,
+  type RelayConfigField,
+} from "@getpaseo/protocol/relay-config";
 
 export interface RelaySettingsValues {
   enabled: boolean;
@@ -9,17 +14,31 @@ export interface RelaySettingsValues {
   publicUseTls: boolean;
 }
 
-export type RelaySettingsField = keyof RelaySettingsValues;
+export type RelaySettingsField = RelayConfigField;
 export type RelaySettingsError = "hostPort";
 
-export interface RelaySettingsFormState {
+interface RelaySettingsFormStateBase {
   values: RelaySettingsValues;
   errors: Partial<Record<RelaySettingsField, RelaySettingsError>>;
   isDirty: boolean;
   canSubmit: boolean;
-  phase: "editing" | "saving" | "restartRequired" | "restarting";
-  error: { kind: "save" | "restart"; message: string } | null;
 }
+
+export type RelaySettingsFormState =
+  | (RelaySettingsFormStateBase & {
+      phase: "editing";
+      error: { kind: "save" | "relayDisable"; message: string } | null;
+    })
+  | (RelaySettingsFormStateBase & { phase: "saving"; error: null })
+  | (RelaySettingsFormStateBase & {
+      phase: "restartRequired";
+      error: { kind: "migration" | "restart"; message: string } | null;
+    })
+  | (RelaySettingsFormStateBase & { phase: "migrating"; error: null })
+  | (RelaySettingsFormStateBase & { phase: "restarting"; error: null });
+
+type RelaySettingsTransitionState<State = RelaySettingsFormState> =
+  State extends RelaySettingsFormState ? Pick<State, "phase" | "error"> : never;
 
 export interface RelaySettingsFormModel {
   getState(): RelaySettingsFormState;
@@ -30,34 +49,14 @@ export interface RelaySettingsFormModel {
   getOverrideEnv(field: RelaySettingsField): string | null;
   startSaving(): void;
   markSaveFailed(message: string): void;
+  markRelayDisableBlocked(message: string): void;
   markRestartRequired(savedValues?: RelaySettingsValues): void;
+  startMigrating(): void;
+  markMigrationFailed(message: string): void;
   startRestarting(): void;
   markRestartFailed(message: string): void;
   close(): void;
 }
-
-const FIELD_PATHS: Record<RelaySettingsField, string> = {
-  enabled: "daemon.relay.enabled",
-  endpoint: "daemon.relay.endpoint",
-  publicEndpoint: "daemon.relay.publicEndpoint",
-  useTls: "daemon.relay.useTls",
-  publicUseTls: "daemon.relay.publicUseTls",
-};
-
-const OVERRIDE_ENV: Record<RelaySettingsField, string> = {
-  enabled: "PASEO_RELAY_ENABLED",
-  endpoint: "PASEO_RELAY_ENDPOINT",
-  publicEndpoint: "PASEO_RELAY_PUBLIC_ENDPOINT",
-  useTls: "PASEO_RELAY_USE_TLS",
-  publicUseTls: "PASEO_RELAY_PUBLIC_USE_TLS",
-};
-
-const RESTART_REQUIRED_FIELDS = new Set<RelaySettingsField>([
-  "endpoint",
-  "publicEndpoint",
-  "useTls",
-  "publicUseTls",
-]);
 
 function normalizeEndpoint(value: string): string | null {
   if (value.includes("://")) return null;
@@ -76,13 +75,15 @@ export function createRelaySettingsFormModel(input: {
   const overrideControlledPaths = new Set(input.overrideControlledPaths);
   const listeners = new Set<() => void>();
   let values = { ...initialValues };
-  let phase: RelaySettingsFormState["phase"] = "editing";
-  let error: RelaySettingsFormState["error"] = null;
+  let transitionState: RelaySettingsTransitionState = {
+    phase: "editing",
+    error: null,
+  };
   let closed = false;
   let state = buildState();
 
   function isOverridden(field: RelaySettingsField): boolean {
-    return overrideControlledPaths.has(FIELD_PATHS[field]);
+    return overrideControlledPaths.has(RELAY_CONFIG_FIELDS[field].persistedPath);
   }
 
   function normalizedValue(
@@ -96,7 +97,7 @@ export function createRelaySettingsFormModel(input: {
   }
 
   function changedFields(): RelaySettingsField[] {
-    return (Object.keys(FIELD_PATHS) as RelaySettingsField[]).filter((field) => {
+    return RELAY_CONFIG_FIELD_KEYS.filter((field) => {
       if (isOverridden(field)) return false;
       const normalized = normalizedValue(field);
       return normalized !== null && normalized !== initialValues[field];
@@ -104,21 +105,20 @@ export function createRelaySettingsFormModel(input: {
   }
 
   function buildState(): RelaySettingsFormState {
-    const errors: RelaySettingsFormState["errors"] = {};
+    const errors: Partial<Record<RelaySettingsField, RelaySettingsError>> = {};
     for (const field of ["endpoint", "publicEndpoint"] as const) {
       if (!isOverridden(field) && normalizeEndpoint(values[field]) === null) {
         errors[field] = "hostPort";
       }
     }
     const isDirty = changedFields().length > 0;
-    return {
+    const common = {
       values: { ...values },
       errors,
       isDirty,
       canSubmit: isDirty && Object.keys(errors).length === 0,
-      phase,
-      error,
     };
+    return { ...common, ...transitionState };
   }
 
   function publish(): void {
@@ -127,12 +127,8 @@ export function createRelaySettingsFormModel(input: {
     for (const listener of listeners) listener();
   }
 
-  function transition(
-    nextPhase: RelaySettingsFormState["phase"],
-    nextError: RelaySettingsFormState["error"] = null,
-  ): void {
-    phase = nextPhase;
-    error = nextError;
+  function transition(next: RelaySettingsTransitionState): void {
+    transitionState = next;
     publish();
   }
 
@@ -140,9 +136,9 @@ export function createRelaySettingsFormModel(input: {
     field: Field,
     value: RelaySettingsValues[Field],
   ): void {
-    if (closed || phase !== "editing" || values[field] === value) return;
+    if (closed || transitionState.phase !== "editing" || values[field] === value) return;
     values = { ...values, [field]: value };
-    error = null;
+    transitionState = { phase: "editing", error: null };
     publish();
   }
 
@@ -166,16 +162,46 @@ export function createRelaySettingsFormModel(input: {
     setField,
     buildPatch,
     hasRestartRequiredChanges: () =>
-      changedFields().some((field) => RESTART_REQUIRED_FIELDS.has(field)),
-    getOverrideEnv: (field) => (isOverridden(field) ? OVERRIDE_ENV[field] : null),
-    startSaving: () => transition("saving"),
-    markSaveFailed: (message) => transition("editing", { kind: "save", message }),
-    markRestartRequired: (savedValues) => {
-      if (savedValues) values = { ...savedValues };
-      transition("restartRequired");
+      changedFields().some((field) => RELAY_CONFIG_FIELDS[field].restartRequired),
+    getOverrideEnv: (field) => (isOverridden(field) ? RELAY_CONFIG_FIELDS[field].env : null),
+    startSaving: () => {
+      if (transitionState.phase === "editing") transition({ phase: "saving", error: null });
     },
-    startRestarting: () => transition("restarting"),
-    markRestartFailed: (message) => transition("restartRequired", { kind: "restart", message }),
+    markSaveFailed: (message) => {
+      if (transitionState.phase === "saving") {
+        transition({ phase: "editing", error: { kind: "save", message } });
+      }
+    },
+    markRelayDisableBlocked: (message) => {
+      if (transitionState.phase === "editing") {
+        transition({ phase: "editing", error: { kind: "relayDisable", message } });
+      }
+    },
+    markRestartRequired: (savedValues) => {
+      if (transitionState.phase !== "saving") return;
+      if (savedValues) values = { ...savedValues };
+      transition({ phase: "restartRequired", error: null });
+    },
+    startMigrating: () => {
+      if (transitionState.phase === "restartRequired") {
+        transition({ phase: "migrating", error: null });
+      }
+    },
+    markMigrationFailed: (message) => {
+      if (transitionState.phase === "migrating") {
+        transition({ phase: "restartRequired", error: { kind: "migration", message } });
+      }
+    },
+    startRestarting: () => {
+      if (transitionState.phase === "migrating") {
+        transition({ phase: "restarting", error: null });
+      }
+    },
+    markRestartFailed: (message) => {
+      if (transitionState.phase === "restarting") {
+        transition({ phase: "restartRequired", error: { kind: "restart", message } });
+      }
+    },
     close() {
       closed = true;
       listeners.clear();

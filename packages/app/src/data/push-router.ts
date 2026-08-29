@@ -425,10 +425,13 @@ function applyDaemonConfigStatus(input: {
   }
   input.queryClient.setQueryData<DaemonConfigQueryData>(
     daemonConfigQueryKey(input.serverId),
-    (current) => ({
-      config: payload.config,
-      overrideControlledPaths: current?.overrideControlledPaths ?? [],
-    }),
+    (current) =>
+      current
+        ? {
+            config: payload.config,
+            overrideControlledPaths: current.overrideControlledPaths,
+          }
+        : undefined,
   );
   void input.queryClient.invalidateQueries({
     queryKey: daemonPairingOfferQueryKey(input.serverId),
