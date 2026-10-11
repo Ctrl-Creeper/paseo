@@ -7,47 +7,41 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProviderSnapshotEntry } from "@getpaseo/protocol/agent-types";
 import type { MutableDaemonConfig } from "@getpaseo/protocol/messages";
 
-const {
-  theme,
-  snapshotState,
-  configState,
-  patchConfigMock,
-  openProviderSettingsMock,
-  hostFeatureState,
-} = vi.hoisted(() => ({
-  theme: {
-    spacing: { 1: 4, "1.5": 6, 2: 8, 3: 12, 4: 16, 6: 24 },
-    iconSize: { sm: 14, md: 20 },
-    fontSize: { xs: 11, sm: 13, base: 15 },
-    fontWeight: { normal: "400" },
-    borderRadius: { lg: 8 },
-    opacity: { 50: 0.5 },
-    colors: {
-      surface1: "#111",
-      surface2: "#222",
-      surface3: "#333",
-      foreground: "#fff",
-      foregroundMuted: "#aaa",
-      border: "#555",
-      accent: "#0a84ff",
-      statusSuccess: "#00ff00",
-      statusWarning: "#ff9500",
-      statusDanger: "#ff0000",
-      palette: { red: { 300: "#ff6b6b" }, white: "#fff" },
+const { theme, snapshotState, configState, patchConfigMock, openProviderSettingsMock } = vi.hoisted(
+  () => ({
+    theme: {
+      spacing: { 1: 4, "1.5": 6, 2: 8, 3: 12, 4: 16, 6: 24 },
+      iconSize: { sm: 14, md: 20 },
+      fontSize: { xs: 11, sm: 13, base: 15 },
+      fontWeight: { normal: "400" },
+      borderRadius: { lg: 8 },
+      opacity: { 50: 0.5 },
+      colors: {
+        surface1: "#111",
+        surface2: "#222",
+        surface3: "#333",
+        foreground: "#fff",
+        foregroundMuted: "#aaa",
+        border: "#555",
+        accent: "#0a84ff",
+        statusSuccess: "#00ff00",
+        statusWarning: "#ff9500",
+        statusDanger: "#ff0000",
+        palette: { red: { 300: "#ff6b6b" }, white: "#fff" },
+      },
     },
-  },
-  snapshotState: {
-    entries: undefined as ProviderSnapshotEntry[] | undefined,
-    isLoading: false,
-    isRefreshing: false,
-  },
-  configState: {
-    config: null as MutableDaemonConfig | null,
-  },
-  patchConfigMock: vi.fn(async () => undefined),
-  openProviderSettingsMock: vi.fn(),
-  hostFeatureState: { providerRemoval: false },
-}));
+    snapshotState: {
+      entries: undefined as ProviderSnapshotEntry[] | undefined,
+      isLoading: false,
+      isRefreshing: false,
+    },
+    configState: {
+      config: null as MutableDaemonConfig | null,
+    },
+    patchConfigMock: vi.fn(async () => undefined),
+    openProviderSettingsMock: vi.fn(),
+  }),
+);
 
 vi.mock("react-native", () => ({
   Platform: { OS: "web" },
@@ -278,8 +272,7 @@ vi.mock("@/runtime/host-runtime", () => ({
 }));
 
 vi.mock("@/runtime/host-features", () => ({
-  useHostFeature: (_serverId: string, feature: string) =>
-    feature === "providerRemoval" ? hostFeatureState.providerRemoval : false,
+  useHostFeature: () => false,
 }));
 
 vi.mock("@/utils/confirm-dialog", () => ({
@@ -309,28 +302,6 @@ const disabledCodexEntry: ProviderSnapshotEntry = {
   enabled: false,
   label: "Codex",
   description: "OpenAI Codex",
-  defaultModeId: null,
-  modes: [],
-};
-
-const configDefinedProviderEntry: ProviderSnapshotEntry = {
-  provider: "grok",
-  status: "ready",
-  enabled: true,
-  source: "custom",
-  label: "Grok",
-  description: "Grok Build agentic coding CLI",
-  defaultModeId: null,
-  modes: [],
-};
-
-const pluginProviderEntry: ProviderSnapshotEntry = {
-  provider: "antigravity",
-  status: "ready",
-  enabled: true,
-  source: "custom",
-  label: "Antigravity",
-  description: "Antigravity CLI on your host",
   defaultModeId: null,
   modes: [],
 };
@@ -379,7 +350,6 @@ describe("ProvidersSection", () => {
     patchConfigMock.mockReset();
     patchConfigMock.mockResolvedValue(undefined);
     openProviderSettingsMock.mockReset();
-    hostFeatureState.providerRemoval = false;
   });
 
   afterEach(() => {
@@ -492,42 +462,5 @@ describe("ProvidersSection", () => {
     expect(patchConfigMock).toHaveBeenCalledWith({
       providers: { claude: { enabled: false } },
     });
-  });
-
-  it("hides the remove action for providers not defined in config.json", () => {
-    snapshotState.entries = [pluginProviderEntry];
-    configState.config = makeConfig({ antigravity: { enabled: false } });
-    hostFeatureState.providerRemoval = true;
-
-    render();
-
-    const row = findRow("Antigravity provider details");
-    expect(row.querySelector('[data-testid="provider-actions-antigravity"]')).toBeNull();
-  });
-
-  it("keeps the remove action for providers defined in config.json", async () => {
-    snapshotState.entries = [configDefinedProviderEntry];
-    configState.config = makeConfig({
-      grok: {
-        extends: "acp",
-        label: "Grok",
-        command: ["grok", "agent", "stdio"],
-        env: {},
-      },
-    });
-    hostFeatureState.providerRemoval = true;
-
-    render();
-
-    const removeButton = container?.querySelector<HTMLElement>(
-      '[data-testid="provider-remove-grok"]',
-    );
-    expect(removeButton).not.toBeNull();
-
-    await act(async () => {
-      removeButton?.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-    });
-
-    expect(patchConfigMock).toHaveBeenCalledWith({ removeProviders: ["grok"] });
   });
 });

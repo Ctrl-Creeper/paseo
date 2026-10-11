@@ -338,6 +338,12 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
   const providerDefinitions = useMemo(() => buildProviderDefinitions(entries), [entries]);
   const hasServer = serverId.length > 0;
 
+  /** Custom providers are deletable only when config.json holds their `extends` definition. */
+  const isConfigOwnedProvider = useCallback(
+    (providerId: string) => Boolean(config?.providers?.[providerId]?.extends),
+    [config],
+  );
+
   const handleOpenProviderSettings = useCallback(
     (providerId: string) => {
       openProviderSettings({ serverId, provider: providerId });
@@ -447,7 +453,7 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
                   canRemove={
                     supportsProviderRemoval &&
                     entry.source === "custom" &&
-                    Boolean(config?.providers?.[def.id]?.extends)
+                    isConfigOwnedProvider(def.id)
                   }
                   isFirst={index === 0}
                   onPress={handleOpenProviderSettings}
