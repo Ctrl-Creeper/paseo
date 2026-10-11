@@ -328,7 +328,7 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
   const isConnected = useHostRuntimeIsConnected(serverId);
   const supportsProviderRemoval = useHostFeature(serverId, "providerRemoval");
   const { entries, isLoading, refresh } = useProvidersSnapshot(serverId);
-  const { patchConfig } = useDaemonConfig(serverId);
+  const { config, patchConfig } = useDaemonConfig(serverId);
   const openProviderSettings = useProviderSettingsStore((state) => state.open);
   const [pendingProviderId, setPendingProviderId] = useState<string | null>(null);
   const [removingProviderId, setRemovingProviderId] = useState<string | null>(null);
@@ -444,7 +444,11 @@ export function ProvidersSection({ serverId }: ProvidersSectionProps) {
                   enabled={entry.enabled ?? true}
                   isToggling={pendingProviderId === def.id}
                   isRemoving={removingProviderId === def.id}
-                  canRemove={supportsProviderRemoval && entry.source === "custom"}
+                  canRemove={
+                    supportsProviderRemoval &&
+                    entry.source === "custom" &&
+                    Boolean(config?.providers?.[def.id]?.extends)
+                  }
                   isFirst={index === 0}
                   onPress={handleOpenProviderSettings}
                   onToggleEnabled={handleToggleEnabled}
