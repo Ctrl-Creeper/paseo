@@ -35,7 +35,7 @@ export function useManualDaemonLifecycle(input: {
     Error
   >({
     mutationFn: async () => {
-      const newStatus = await startDesktopDaemon();
+      const newStatus = await startDesktopDaemon("manual");
       const upsertResult = await upsertDesktopDaemonConnection(getHostRuntimeStore(), newStatus);
       if (!upsertResult.ok) {
         throw new DaemonConnectionRegistrationError(upsertResult.error);
